@@ -7,10 +7,79 @@
     <groupId>com.atguigu</groupId>
     <artifactId>MovieRecommendSystem</artifactId>
     <version>1.0-SNAPSHOT</version>
+    <modules>
+        <module>recommender</module>
+    </modules>
+    <packaging>pom</packaging>
 
+    <!-- 声明子项目共用的配置属性 -->
     <properties>
-        <maven.compiler.source>8</maven.compiler.source>
-        <maven.compiler.target>8</maven.compiler.target>
+        <spark.version>2.1.1</spark.version>
+        <scala.version>2.11.8</scala.version>
+        <log4j.version>1.2.17</log4j.version>
+        <slf4j.version>1.7.22</slf4j.version>
     </properties>
+
+    <!-- 声明并引入子项目共有的依赖 -->
+    <dependencies>
+
+        <!-- logging -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>jcl-over-slf4j</artifactId>
+            <version>${slf4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>${slf4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
+            <version>${slf4j.version}</version>
+        </dependency>
+        <!-- 具体的日志实现 -->
+        <dependency>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+            <version>${log4j.version}</version>
+        </dependency>
+        <!-- logging end -->
+
+    </dependencies>
+
+    <!-- 仅声明子项目共有的依赖, 如果子项目需要此依赖, 那么子项目需要声明 -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.scala-lang</groupId>
+                <artifactId>scala-library</artifactId>
+                <version>${scala.version}</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <!-- 声明构建信息 -->
+    <build>
+        <!-- 声明并引入子项目共有的插件, 插件就是附着到Maven各个声明周期的具体实现 -->
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.6.1</version>
+                <!-- 所有的编译都依照jdk1.8 -->
+                <configuration>
+                    <source>1.8</source>
+                    <target>1.8</target>
+                </configuration>
+            </plugin>
+        </plugins>
+
+        <!-- 仅声明子项目共有的插件, 如果子项目需要此插件, 那么子项目需要声明 -->
+        <pluginManagement>
+
+        </pluginManagement>
+    </build>
 
 </project>
