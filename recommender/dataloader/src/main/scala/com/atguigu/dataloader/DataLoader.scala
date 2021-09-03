@@ -4,6 +4,14 @@ import com.mongodb.casbah.commons.MongoDBObject
 import com.mongodb.casbah.{MongoClient, MongoClientURI}
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.elasticsearch.action.admin.indices.create.CreateIndexRequest
+import org.elasticsearch.action.admin.indices.delete.DeleteIndexRequest
+import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsRequest
+import org.elasticsearch.common.settings.Settings
+import org.elasticsearch.common.transport.InetSocketTransportAddress
+import org.elasticsearch.transport.client.PreBuiltTransportClient
+
+import java.net.InetAddress
 
 /**
  * Movies数据集, 数据集字段通过 ^分割
@@ -15,9 +23,12 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
  * August 26, 1997^                 电影发行日期
  * 1995^                            电影拍摄日期
  * English ^                        电影的语言
- * Action|Drama|Romance|War ^       电影的类型
+ * Action|Drama|Romance|War         电影的类型
  * Liam Neeson|Jessica Lange...     电影的演员
  * Michael Caton-Jones              电影的导演
+ *
+ * 处理成这种形式:
+ * Mid, tag1|tag2|tag3|...
  */
 
 case class Movie(val mid: Int, val name: String, val descri: String, val timelong: String, val issue: String,
@@ -86,7 +97,7 @@ object DataLoader {
             "es.httpHosts" -> "192.168.177.128:9200",
             "es.transportHosts" -> "192.168.177.128:9300",
             "es.index" -> "recommender",
-            "es.cluster.name" -> "elasticsearch"
+            "es.cluster.name" -> "es-cluster"
         )
 
         // 需要创建SparkConfig配置
@@ -141,10 +152,35 @@ object DataLoader {
         implicit val mongoConfig = MongoConfig(config.get("mongo.uri").get, config.get("mongo.db").get)
 
         // 需要将数据保存到MongoDB中
-        storeDataInMongoDB(movieDF, ratingDF, tagDF)
+        // storeDataInMongoDB(movieDF, ratingDF, tagDF)
+
+        /**
+         * 首先需要将 Tag数据集进行处理, 处理后的形式: Mid, tag1|tag2|tag3|...
+         * 然后需要将处理后的Tag数据与Movie数据融合, 产生新的Movie数据
+         * 最后将新的Movie数据保存到ES中
+         */
+        import org.apache.spark.sql.functions._
+
+        /**
+         * 以|为中间线, 聚合Tag
+         * MID, Tags
+         * 1    tag1|tag2|tag3...
+         */
+        val newTag = tagDF.groupBy($"mid")
+            .agg(concat_ws("|", collect_set($"tag")).as("tags"))
+            .select("mid", "tags")
+
+        val movieWithTagsDF = movieDF.join(newTag, Seq("mid", "mid"), "left")
+
+        // 声明了一个es配置的隐式参数
+        implicit val esConfig = ESConfig(
+            config.get("es.httpHosts").get,
+            config.get("es.transportHosts").get,
+            config.get("es.index").get,
+            config.get("es.cluster.name").get)
 
         // 需要将数据保存到es中
-        // storeDataInES()
+        storeDataInES(movieWithTagsDF)(esConfig)
 
         // 关闭Spark
         spark.stop()
@@ -195,7 +231,36 @@ object DataLoader {
     }
 
     // 将数据保存到ES中的方法
-    def storeDataInES(): Unit = {
+    def storeDataInES(movieDF: DataFrame)(implicit esConfig: ESConfig): Unit = {
+
+        // 新建一个配置
+        val settings: Settings = Settings.builder().put("cluster.name", esConfig.clusterName).build()
+
+        // 新建一个es的客户端
+        val esClient = new PreBuiltTransportClient(settings)
+
+        // 需要将transportHost添加到esClient中
+        val REGEX_HOST_PORT = "(.+):(\\d+)".r
+        esConfig.transportHosts.split(",").foreach {
+            case REGEX_HOST_PORT(host: String, port: String) => {
+                esClient.addTransportAddress(new InetSocketTransportAddress(InetAddress.getByName(host), port.toInt))
+            }
+        }
+
+        // 需要清除掉es中遗留的数据
+        if (esClient.admin().indices().exists(new IndicesExistsRequest(esConfig.index)).actionGet().isExists) {
+            esClient.admin().indices().delete(new DeleteIndexRequest(esConfig.index))
+        }
+        esClient.admin().indices().create(new CreateIndexRequest(esConfig.index))
+
+        // 将数据写入到es中
+        movieDF.write
+            .option("es.nodes", esConfig.httpHosts)
+            .option("es.http.timeout", "100m")
+            .option("es.mapping.id", "mid")
+            .mode("overwrite")
+            .format("org.elasticsearch.spark.sql")
+            .save(esConfig.index + "/" + ES_MOVIE_INDEX)
 
     }
 
