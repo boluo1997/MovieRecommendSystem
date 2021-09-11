@@ -14,9 +14,16 @@
     <properties>
         <mogodb-spark.version>2.0.0</mogodb-spark.version>
         <casbah.version>3.1.1</casbah.version>
+        <jblas.version>1.2.1</jblas.version>
     </properties>
 
     <dependencies>
+
+        <dependency>
+            <groupId>org.scalanlp</groupId>
+            <artifactId>jblas</artifactId>
+            <version>${jblas.version}</version>
+        </dependency>
 
         <!-- Spark 依赖引入-->
         <dependency>
