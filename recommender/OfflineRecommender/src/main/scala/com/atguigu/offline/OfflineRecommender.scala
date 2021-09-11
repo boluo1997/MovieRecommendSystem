@@ -88,7 +88,9 @@ object OfflineRecommender {
             .format("com.mongodb.spark.sql")
             .load()
             .as[MovieRating]
-            .rdd.map(rating => (rating.uid, rating.mid, rating.score))
+            .rdd
+            .map(rating => (rating.uid, rating.mid, rating.score))
+            .cache()
 
         // 用户的数据集 RDD[Int]
         val userRDD = ratingRDD.map(_._1).distinct()
@@ -106,7 +108,7 @@ object OfflineRecommender {
 
         // 创建训练数据集
         val trainData = ratingRDD.map(x => Rating(x._1, x._2, x._3))
-        val (rank, iterations, lambda) = (50, 10, 0.01)
+        val (rank, iterations, lambda) = (50, 5, 0.01)
 
         // 训练ALS模型
         val model = ALS.train(trainData, rank, iterations, lambda)
