@@ -13,6 +13,7 @@
     <packaging>pom</packaging>
     <modules>
         <module>dataloader</module>
+        <module>StreamingRecommender</module>
     </modules>
 
     <!-- 声明共有依赖 -->
